@@ -1,3 +1,7 @@
+from dataclasses import dataclass
+
+
+@dataclass
 class Token:
     expires_at   : float      = 0.0
     access_token : str | None = None

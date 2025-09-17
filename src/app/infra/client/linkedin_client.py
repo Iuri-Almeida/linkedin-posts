@@ -1,22 +1,81 @@
-import time
 import httpx
+import time
+import urllib.parse
 
-from typing import Any
 from fastapi import HTTPException
+from jose import jwt
+from typing import Any
 
 from app.config.settings import Settings
+from app.domain.models.post import Post
 from app.domain.models.token import Token
 from app.domain.repository.token_repository import TokenRepository
-from app.domain.models.post import Post
 
 
 class LinkedInClient:
     def __init__(self, settings: Settings, repository: TokenRepository):
         self.__settings = settings
-        self.__repository = repository
+        self.repository = repository
+
+    def build_authorize_url(self, state: str = "abc123") -> str:
+        params = {
+            "response_type": "code",
+            "client_id": self.__settings.LI_CLIENT_ID,
+            "redirect_uri": self.__settings.LI_REDIRECT_URI,
+            "scope": self.__settings.LI_SCOPES,
+            "state": state,
+        }
+
+        return f"{self.__settings.LI_AUTH_URL}?{urllib.parse.urlencode(params)}"
+
+    def exchange_code(self, code: str) -> Token:
+        data = {
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": self.__settings.LI_REDIRECT_URI,
+            "client_id": self.__settings.LI_CLIENT_ID,
+            "client_secret": self.__settings.LI_CLIENT_SECRET,
+        }
+
+        with httpx.Client(timeout=20) as c:
+            r = c.post(self.__settings.LI_TOKEN_URL, data=data)
+
+        if r.status_code >= 400:
+            raise HTTPException(
+                status_code=r.status_code,
+                detail={
+                    "status": r.status_code,
+                    "error": r.text
+                }
+            )
+
+        token = r.json()
+
+        token_bundle = self.repository.get()
+        token_bundle.access_token  = token["access_token"]
+        token_bundle.expires_at    = time.time() + token.get("expires_in", 3600)
+        token_bundle.refresh_token = token.get("refresh_token")
+
+        id_token = token.get("id_token")
+
+        if not id_token:
+            raise ValueError("No id_token returned; ensure 'openid profile email' scope is granted")
+
+        claims = jwt.get_unverified_claims(id_token)
+
+        sub = claims.get("sub")
+
+        if not sub:
+            raise ValueError("ID token missing 'sub' claim")
+
+        token_bundle.person_urn = f"urn:li:person:{sub}"
+
+        self.repository.set(token_bundle)
+
+        return token_bundle
 
     def refresh_if_needed(self) -> Token:
-        token_bundle = self.__repository.get()
+        token_bundle = self.repository.get()
 
         if time.time() < token_bundle.expires_at - 60:
             return token_bundle
@@ -48,7 +107,7 @@ class LinkedInClient:
         if "refresh_token" in payload:
             token_bundle.refresh_token = payload["refresh_token"]
 
-        self.__repository.set(token_bundle)
+        self.repository.set(token_bundle)
 
         return token_bundle
 
@@ -60,7 +119,7 @@ class LinkedInClient:
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
-    
+
     def create_text_post(self, post: Post) -> dict[str, Any]:
         token_bundle = self.refresh_if_needed()
 
