@@ -3,7 +3,10 @@ import httpx
 import secrets
 import urllib.parse
 
-from fastapi import FastAPI, HTTPException
+from fastapi import (
+    FastAPI,
+    HTTPException
+)
 from fastapi.responses import RedirectResponse
 from jose import jwt
 from datetime import (
@@ -11,19 +14,20 @@ from datetime import (
     timezone
 )
 
-from app.utils.provider import get_settings
-from app.domain.models.token import Token
-from app.domain.repository.token_repository import TokenRepository
-from app.infra.persistence.token_repository_memory import MemoryTokenRepository
+from app.utils.provider import (
+    get_settings,
+    get_repository,
+    get_client
+)
+from app.domain.models.post import Post
 
 app = FastAPI(title="LinkedIn Poster API")
 
 settings = get_settings()
+token_repository = get_repository()
+linkedin_client = get_client()
 
 STATE_STORE = dict()
-
-token_repository: TokenRepository = MemoryTokenRepository()
-token_bundle: Token = token_repository.get()
 
 
 @app.get("/health")
@@ -98,6 +102,8 @@ def callback(
 
         token: dict = r.json()
 
+        token_bundle = token_repository.get()
+
         token_bundle.access_token = token.get("access_token")
         token_bundle.expires_at = time.time() + token.get("expires_in", 3600)
         token_bundle.refresh_token = token.get("refresh_token")
@@ -126,48 +132,9 @@ def callback(
     raise HTTPException(status_code=400, detail="Invalid or expired 'state' (CSRF protection).")
 
 
-def ensure_token_fresh() -> Token:
-    if time.time() < token_bundle.expires_at - 60:
-        return token_bundle
-
-    if not token_bundle.refresh_token:
-        raise HTTPException(status_code=401, detail="Token expired and no refresh_token available.")
-
-    data = {
-        "grant_type": "refresh_token",
-        "refresh_token": token_bundle.refresh_token,
-        "client_id": settings.LI_CLIENT_ID,
-        "client_secret": settings.LI_CLIENT_SECRET,
-    }
-
-    with httpx.Client(timeout=20) as c:
-        r = c.post(settings.LI_TOKEN_URL, data=data)
-
-    if r.status_code >= 400:
-        raise HTTPException(
-            status_code=r.status_code,
-            detail={
-                "status": r.status_code,
-                "error": r.text
-            }
-        )
-
-    payload = r.json()
-
-    token_bundle.access_token = payload["access_token"]
-    token_bundle.expires_at   = time.time() + payload.get("expires_in", 3600)
-
-    if "refresh_token" in payload:
-        token_bundle.refresh_token = payload["refresh_token"]
-
-    token_repository.set(token_bundle)
-
-    return token_bundle
-
-
 @app.get("/auth/status")
 def auth_status():
-    token_bundle = ensure_token_fresh()
+    token_bundle = linkedin_client.refresh_if_needed()
 
     return {
         "logged_in": bool(token_bundle.access_token),
@@ -175,3 +142,13 @@ def auth_status():
         "expires_in_s": max(0, int(token_bundle.expires_at - time.time())),
         "author": token_bundle.person_urn,
     }
+
+
+@app.post("/posts")
+def posts(post: Post):
+    token_bundle = linkedin_client.refresh_if_needed()
+
+    if not token_bundle.person_urn:
+        raise HTTPException(status_code=400, detail="No 'person_urn' was found. Please make sure to login.")
+
+    return linkedin_client.create_text_post(post)
