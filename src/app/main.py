@@ -88,7 +88,13 @@ def callback(
             r = c.post(settings.LI_TOKEN_URL, data=data)
 
         if r.status_code >= 400:
-            raise HTTPException(status_code=r.status_code, detail={"error": r.json()})
+            raise HTTPException(
+                status_code=r.status_code,
+                detail={
+                    "status": r.status_code,
+                    "error": r.text
+                }
+            )
 
         token: dict = r.json()
 
@@ -113,16 +119,59 @@ def callback(
 
         token_bundle.person_urn = f"urn:li:person:{sub}"
 
+        token_repository.set(token_bundle)
+
         return {"message": "LinkedIn connected", "author": token_bundle.person_urn}
 
     raise HTTPException(status_code=400, detail="Invalid or expired 'state' (CSRF protection).")
 
 
+def ensure_token_fresh() -> Token:
+    if time.time() < token_bundle.expires_at - 60:
+        return token_bundle
+
+    if not token_bundle.refresh_token:
+        raise HTTPException(status_code=401, detail="Token expired and no refresh_token available.")
+
+    data = {
+        "grant_type": "refresh_token",
+        "refresh_token": token_bundle.refresh_token,
+        "client_id": settings.LI_CLIENT_ID,
+        "client_secret": settings.LI_CLIENT_SECRET,
+    }
+
+    with httpx.Client(timeout=20) as c:
+        r = c.post(settings.LI_TOKEN_URL, data=data)
+
+    if r.status_code >= 400:
+        raise HTTPException(
+            status_code=r.status_code,
+            detail={
+                "status": r.status_code,
+                "error": r.text
+            }
+        )
+
+    payload = r.json()
+
+    token_bundle.access_token = payload["access_token"]
+    token_bundle.expires_at   = time.time() + payload.get("expires_in", 3600)
+
+    if "refresh_token" in payload:
+        token_bundle.refresh_token = payload["refresh_token"]
+
+    token_repository.set(token_bundle)
+
+    return token_bundle
+
+
 @app.get("/auth/status")
 def auth_status():
+    token_bundle = ensure_token_fresh()
+
     return {
         "logged_in": bool(token_bundle.access_token),
         "has_refresh": bool(token_bundle.refresh_token),
-        "expires_in_sec": max(0, int(token_bundle.expires_at - time.time())),
+        "expires_in_s": max(0, int(token_bundle.expires_at - time.time())),
         "author": token_bundle.person_urn,
     }
