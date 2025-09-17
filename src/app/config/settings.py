@@ -21,9 +21,11 @@ class Settings(BaseSettings):
 
     SERVICE_NAME    : str = "linkedin-poster-api"
 
+    LI_AUTH_URL : str = "https://www.linkedin.com/oauth/v2/authorization"
+    LI_TOKEN_URL: str = "https://www.linkedin.com/oauth/v2/accessToken"
+    LI_POSTS_URL: str = "https://api.linkedin.com/rest/posts"
+
     model_config = SettingsConfigDict(
         env_file=str(ENV_PATH),
         env_file_encoding="utf-8",
     )
-
-
