@@ -8,6 +8,7 @@ from typing import Any
 
 from app.config.settings import Settings
 from app.domain.models.post import Post
+from app.domain.models.image_post import ImagePost
 from app.domain.models.token import Token
 from app.domain.repository.token_repository import TokenRepository
 
@@ -120,7 +121,7 @@ class LinkedInClient:
             "Accept": "application/json",
         }
 
-    def create_text_post(self, post: Post) -> dict[str, Any]:
+    def create_post(self, post: Post, image_urn: str = None) -> dict[str, Any]:
         token_bundle = self.refresh_if_needed()
 
         payload = {
@@ -135,11 +136,18 @@ class LinkedInClient:
             "lifecycleState": "PUBLISHED",
         }
 
+        if image_urn:
+            payload["content"] = {
+                "media": {
+                    "id": image_urn
+                }
+            }
+
         with httpx.Client(timeout=20) as c:
             r = c.post(self.__settings.LI_POSTS_URL, headers=self.get_headers(token_bundle.access_token), json=payload)
 
         if r.status_code >= 400:
-            return HTTPException(status_code=r.status_code, headers=dict(r.headers), detail={"body": r.text})
+            raise HTTPException(status_code=r.status_code, headers=dict(r.headers), detail={"body": r.text})
 
         ct = (r.headers.get("content-type") or "").lower()
 
@@ -149,3 +157,44 @@ class LinkedInClient:
         post_id = r.headers.get("x-restli-id") or r.headers.get("location")
 
         return {"status_code": r.status_code, "id": post_id, "note": "Created (no JSON body)."}
+
+    def process_image(self, image_post: ImagePost) -> dict[str, Any]:
+        token_bundle = self.refresh_if_needed()
+
+        upload_url, image_urn = self.__register_image_upload(token_bundle)
+
+        self.__upload_image(upload_url, image_post.file_bytes, token_bundle.access_token, image_post.mime_type)
+
+        return self.create_post(image_post, image_urn)
+
+    def __register_image_upload(self, token_bundle: Token) -> tuple:
+        payload = {
+            "initializeUploadRequest": {
+                "owner": token_bundle.person_urn
+            }
+        }
+
+        with httpx.Client(timeout=20) as c:
+            r = c.post(self.__settings.LI_REGISTER_UPLOAD_URL, headers=self.get_headers(token_bundle.access_token), json=payload)
+
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, headers=dict(r.headers), detail={"body": r.text})
+
+        response = r.json()
+
+        upload_url = response["value"]["uploadUrl"]
+        image_urn = response["value"]["image"]
+
+        return upload_url, image_urn
+
+    def __upload_image(self, upload_url: str, image_bytes: bytes, access_token: str, mime_type: str = "image/jpeg") -> None:
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": mime_type
+        }
+
+        with httpx.Client(timeout=20) as c:
+            r = c.put(url=upload_url, content=image_bytes, headers=headers)
+
+        if r.status_code not in (200, 201):
+            raise HTTPException(status_code=r.status_code, detail={"body": r.text})
