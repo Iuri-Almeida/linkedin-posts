@@ -14,17 +14,22 @@ router = APIRouter(prefix="/posts", tags=["posts"])
 
 
 @router.post("")
-def posts(post: Post, service: PostService = Depends(get_post_service)):
-    return service.create_text_post(post)
+async def posts(text: UploadFile = File(description="txt"), service: PostService = Depends(get_post_service)):
+    text_bytes = await text.read()
+
+    return service.create_text_post(Post(text=text_bytes.decode(errors="replace")))
 
 
 @router.post("/image")
 async def post_image(
-    text: str = "Test text",
+    text: UploadFile = File(description="txt"),
     file: UploadFile = File(description="jpg/png"),
     mime_type: str = "image/png",
     service: PostService = Depends(get_post_service)
 ):
-    data = await file.read()
+    text_bytes = await text.read()
+    file_bytes = await file.read()
 
-    return service.create_image_post(ImagePost(text=text, file_bytes=data, mime_type=mime_type))
+    text_formatted = text_bytes.decode(errors="replace").replace("(", "\(").replace(")", "\)")
+
+    return service.create_image_post(ImagePost(text=text_formatted, file_bytes=file_bytes, mime_type=mime_type))

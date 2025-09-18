@@ -6,6 +6,6 @@ from typing import Annotated
 
 
 class Post(BaseModel):
-    text      : Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
+    text      : Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2950)]
     visibility: str = "PUBLIC"
     hashtags  : str = ""
