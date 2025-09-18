@@ -10,7 +10,6 @@ from typing import Annotated
 ROOT = Path(__file__).resolve().parents[3]
 ENV_PATH = ROOT / ".env"
 TOKENS_PATH = ROOT / ".tokens.json"
-IMAGE_PATH = ROOT / "image.png"
 
 
 class Settings(BaseSettings):
@@ -31,8 +30,6 @@ class Settings(BaseSettings):
     LI_REGISTER_UPLOAD_URL: str = "https://api.linkedin.com/rest/images?action=initializeUpload"
 
     TOKENS_PATH: str = str(TOKENS_PATH)
-
-    IMAGE_PATH: str = str(IMAGE_PATH)
 
     model_config = SettingsConfigDict(
         env_file=str(ENV_PATH),
