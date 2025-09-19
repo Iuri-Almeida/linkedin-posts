@@ -36,35 +36,35 @@ A **FastAPI** service to **authenticate with LinkedIn (OAuth 2.0 + OIDC)** and *
 linkedin-posts/
 ├─ src/
 │  └─ app/
-│     ├─ main.py                      # app composition (FastAPI)
+│     ├─ main.py                           # app composition (FastAPI)
 │     ├─ config/
-│     │  └─ settings.py               # Pydantic Settings + defaults
+│     │  └─ settings.py                    # Pydantic Settings + defaults
 │     ├─ domain/
 │     │  ├─ models/
-│     │  │  ├─ post.py                # Text Post – validations (bytes→str, limits)
-│     │  │  ├─ image_post.py          # Image Post (bytes + mime)
-│     │  │  └─ token.py               # Token bundle (access/refresh/exp/urn)
+│     │  │  ├─ image_post.py               # Image Post (bytes + mime)
+│     │  │  ├─ post.py                     # Text Post – validations (bytes→str, limits)
+│     │  │  └─ token.py                    # Token bundle (access/refresh/exp/urn)
 │     │  └─ repositories/
-│     │     └─ token_repository.py    # contract (Protocol/ABC)
+│     │     └─ token_repository.py         # contract (Protocol/ABC)
 │     ├─ application/
 │     │  └─ services/
-│     │     ├─ auth_service.py        # OAuth/OIDC flow and status
-│     │     ├─ post_service.py        # orchestrates text/image posts
-│     │     └─ health_service.py      # health/env-check
+│     │     ├─ auth_service.py             # OAuth/OIDC flow and status
+│     │     ├─ health_service.py           # health/env-check
+│     │     └─ post_service.py             # orchestrates text/image posts
 │     ├─ infra/
 │     │  ├─ client/
-│     │  │  └─ linkedin_client.py     # LinkedIn calls (authorize, token, refresh, posts, images)
-│     │  └─ persistence/
-│     │     ├─ token_repository_file.py   # file persistence
-│     │     └─ token_repository_memory.py # in-memory persistence
-│     └─ presentation/
-│        ├─ routes/
-│        │  ├─ auth.py                 # /auth/login, /auth/callback, /auth/status
-│        │  ├─ post.py                 # /posts (text) & /posts/image (multipart)
-│        │  └─ health.py               # /health, /health/env-check
-│        └─ deps.py                    # providers (Settings, Client, Services, Lock)
-├─ .env                                # local env (gitignored)
-├─ README.md                           # this file
+│     │  │  └─ linkedin_client.py          # LinkedIn calls (authorize, token, refresh, posts, images)
+│     │  ├─ persistence/
+│     │  │  ├─ token_repository_file.py    # file persistence
+│     │  │  └─ token_repository_memory.py  # in-memory persistence
+│     │  └─ routes/
+│     │     ├─ auth.py                     # /auth/login, /auth/callback, /auth/status
+│     │     ├─ health.py                   # /health, /health/env-check
+│     │     └─ post.py                     # /posts (text) & /posts/image (multipart)
+│     └─ utils/
+│        └─ provider.py                    # providers (Settings, Client, Services)
+├─ .env                                    # local env (gitignored)
+├─ README.md                               # this file
 └─ requirements.txt
 ```
 
