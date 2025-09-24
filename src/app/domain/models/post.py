@@ -19,9 +19,9 @@ class Post(BaseModel):
     def bytes_to_formatted_string(cls, v: Any) -> str:
         if isinstance(v, (bytes, bytearray, memoryview)):
             try:
-                return bytes(v).decode(encoding="utf-8").replace("(", "\(").replace(")", "\)")
+                return bytes(v).decode(encoding="utf-8").replace("(", "\\(").replace(")", "\\)")
             except UnicodeDecodeError:
-                return bytes(v).decode(encoding="utf-8", errors="replace").replace("(", "\(").replace(")", "\)")
+                return bytes(v).decode(encoding="utf-8", errors="replace").replace("(", "\\(").replace(")", "\\)")
 
         if isinstance(v, str):
             return v
